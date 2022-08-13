@@ -16,7 +16,7 @@ FASTLED_USING_NAMESPACE
 // FASTLED
 #define DATA_PIN1    3
 #define NUM_LEDS1    64
-#define DATA_PIN2    3
+#define DATA_PIN2    5
 #define NUM_LEDS2    64
 //#define CLK_PIN   4
 
