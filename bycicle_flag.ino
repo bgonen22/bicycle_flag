@@ -15,7 +15,7 @@ FASTLED_USING_NAMESPACE
 
 // FASTLED
 #define DATA_PIN1    3
-#define NUM_LEDS1    64
+#define NUM_LEDS    64
 #define DATA_PIN2    5
 #define NUM_LEDS2    64
 //#define CLK_PIN   4
@@ -24,6 +24,7 @@ FASTLED_USING_NAMESPACE
 #define COLOR_ORDER GRB
 
 CRGB leds[NUM_LEDS];
+CRGB leds2[NUM_LEDS2];
 
 #define BRIGHTNESS          96
 #define FRAMES_PER_SECOND  120
@@ -70,19 +71,19 @@ void setup() {
   delay(3000); // 3 second delay for recovery
   
   // tell FastLED about the LED strip configuration
-  FastLED.addLeds<LED_TYPE,DATA_PIN1,COLOR_ORDER>(leds, NUM_LEDS1).setCorrection(TypicalLEDStrip);
-  FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds, NUM_LEDS2).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_TYPE,DATA_PIN1,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds2, NUM_LEDS2).setCorrection(TypicalLEDStrip);
   //FastLED.addLeds<LED_TYPE,DATA_PIN,CLK_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
 
   // set master brightness control
   FastLED.setBrightness(BRIGHTNESS);
-
+  Serial.begin(9600);
    pixels.begin(); // This initializes the NeoPixel library.
 }
 
 
 // List of patterns to cycle through.  Each is defined as a separate function below.
-typedef void (*SimplePatternList[])();
+typedef void (*SimplePatternList[])(CRGB* strip, int num_pixels);
 SimplePatternList gPatterns = { rainbow, rainbowWithGlitter, confetti, sinelon, juggle, bpm };
 
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
@@ -93,7 +94,8 @@ int iter =0;
 void loop()
 {
   // Call the current pattern function once, updating the 'leds' array
-  gPatterns[gCurrentPatternNumber]();
+  gPatterns[gCurrentPatternNumber](leds,NUM_LEDS);
+  gPatterns[gCurrentPatternNumber](leds2,NUM_LEDS2);
 
   // send the 'leds' array out to the actual LED strip
   FastLED.show();  
@@ -105,8 +107,7 @@ void loop()
   EVERY_N_SECONDS( 10 ) { nextPattern(); } // change patterns periodically
 
   
-  // For a set of NeoPixels the first NeoPixel is 0, second is 1, all the way up to the count of pixels minus one.
-  int i = -1;
+  // For a set of NeoPixels the first NeoPixel is 0, second is 1, all the way up to the count of pixels minus one.  
   int last_led;
   if (FROM_MIDDLE) {
     last_led = NUMPIXELS/2;  
@@ -114,15 +115,17 @@ void loop()
     last_led = NUMPIXELS -1;
   }
   iter++;
+  //Serial.println(iter);
   if (iter % delayval == 0) {
     iter = 0;
-    neo_current_pixel++;
-//    Serial.println(head_color);
-    
-    if (neo_current_pixel == last_led) {
-      neo_current_pixel = LastLed(i);
-      return;    
-    }      
+    if (neo_current_pixel == 2* last_led) {
+      neo_current_pixel = last_led;
+    } else {
+      neo_current_pixel++;
+    }
+    //Serial.println(head_color);
+    //Serial.println(neo_current_pixel);
+     
     //Serial.println(i);
     // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
     lightAllTraces(neo_current_pixel, HIGHLEVEL); // the first led.
@@ -150,109 +153,64 @@ void nextPattern()
   gCurrentPatternNumber = (gCurrentPatternNumber + 1) % ARRAY_SIZE( gPatterns);
 }
 
-void rainbow() 
+void rainbow(CRGB* strip, int num_pixels) 
 {
   // FastLED's built-in rainbow generator
-  fill_rainbow( leds, NUM_LEDS, gHue, 7);
+  fill_rainbow( strip, num_pixels, gHue, 7);  
 }
 
-void rainbowWithGlitter() 
+void rainbowWithGlitter(CRGB* strip, int num_pixels) 
 {
   // built-in FastLED rainbow, plus some random sparkly glitter
-  rainbow();
-  addGlitter(80);
+  rainbow(strip, num_pixels);
+  addGlitter(80,strip, num_pixels);
 }
 
-void addGlitter( fract8 chanceOfGlitter) 
+void addGlitter( fract8 chanceOfGlitter,CRGB strip, int num_pixels) 
 {
   if( random8() < chanceOfGlitter) {
-    leds[ random16(NUM_LEDS) ] += CRGB::White;
+    strip[ random16(num_pixels) ] += CRGB::White;
+    
   }
 }
 
-void confetti() 
+void confetti(CRGB* strip, int num_pixels) 
 {
   // random colored speckles that blink in and fade smoothly
-  fadeToBlackBy( leds, NUM_LEDS, 10);
-  int pos = random16(NUM_LEDS);
-  leds[pos] += CHSV( gHue + random8(64), 200, 255);
+  fadeToBlackBy( strip, num_pixels, 10);  
+  int pos = random16(num_pixels);
+  strip[pos] += CHSV( gHue + random8(64), 200, 255);  
 }
 
-void sinelon()
+void sinelon(CRGB* strip, int num_pixels)
 {
   // a colored dot sweeping back and forth, with fading trails
-  fadeToBlackBy( leds, NUM_LEDS, 20);
-  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
-  leds[pos] += CHSV( gHue, 255, 192);
+  fadeToBlackBy( strip, num_pixels, 20);
+  int pos = beatsin16( 13, 0, num_pixels-1 );
+  strip[pos] += CHSV( gHue, 255, 192);
 }
 
-void bpm()
+void bpm(CRGB strip, int num_pixels)
 {
   // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
   uint8_t BeatsPerMinute = 62;
   CRGBPalette16 palette = PartyColors_p;
   uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
-  for( int i = 0; i < NUM_LEDS; i++) { //9948
-    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  for( int i = 0; i < num_pixels; i++) { //9948
+    strip[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
   }
 }
 
-void juggle() {
+void juggle(CRGB* strip, int num_pixels) {
   // eight colored dots, weaving in and out of sync with each other
-  fadeToBlackBy( leds, NUM_LEDS, 20);
+  fadeToBlackBy( strip, num_pixels, 20);
   uint8_t dothue = 0;
   for( int i = 0; i < 8; i++) {
-    leds[beatsin16( i+7, 0, NUM_LEDS-1 )] |= CHSV(dothue, 200, 255);
+    strip[beatsin16( i+7, 0, num_pixels-1 )] |= CHSV(dothue, 200, 255);
     dothue += 32;
   }
 }
 
-
-
-
-int LastLed (int i) {
-  lightAllTraces(i, HIGHLEVEL); 
-  lightAllTraces(i-1, MEDIUMLEVEL);
-  lightAllTraces(i-2, LOWLEVEL); 
-  if (JUMP > 3) {
-    lightAllTraces(i-3, 0); 
-  }
-  pixels.show(); // This sends the updated pixel color to the hardware.
-  delay(delayval); // Delay for a period of time (in milliseconds).
-
-  
-  lightAllTraces(i, MEDIUMLEVEL);                     
-  lightAllTraces(i-1,LOWLEVEL);
-  if (JUMP > 3) {
-   lightAllTraces(i-2, 0);                 
-  }
-  head_color = (head_color+1)%NUMOFCOLORS;                    
-  lightAllTraces(i-JUMP+1,HIGHLEVEL); 
-
-
-  pixels.show(); // This sends the updated pixel color to the hardware.
-  delay(delayval); // Delay for a period of time (in milliseconds).
-
-  lightAllTraces(i-JUMP+2,HIGHLEVEL); 
-  lightAllTraces(i-JUMP+1, MEDIUMLEVEL);                     
-  head_color = (head_color-1)%NUMOFCOLORS;                    
-  lightAllTraces(i, LOWLEVEL);
-  if (JUMP > 3) {
-   lightAllTraces(i-1, 0);                                 
-  }
-  pixels.show(); // This sends the updated pixel color to the hardware.
-  delay(delayval); // Delay for a period of time (in milliseconds).
-  if (JUMP > 3) { 
-    lightAllTraces(i, 0);    
-  }
-  head_color = (head_color+1)%NUMOFCOLORS;                    
-  lightAllTraces(i-JUMP+3, HIGHLEVEL); 
-  lightAllTraces(i-JUMP+2, MEDIUMLEVEL);                     
-  lightAllTraces(i-JUMP+1, LOWLEVEL);
-
-  i=i-JUMP+3;
-  return i;
-}
 void lightAllTraces(int i, float power) {
   int trace_num = 0;
    //Serial.println(i);
